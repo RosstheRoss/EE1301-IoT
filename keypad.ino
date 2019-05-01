@@ -10,7 +10,7 @@ private:
     const static int codeLength=4;
     char secretCode[codeLength]={'5','6','7','8'}; // 8324 = TECH
     
-    bool correctCode=false;
+    bool correctCode=false;     int correctCount=0;
     const static byte ROWS=4, COLS=3;
     byte rowPins[ROWS] = {D1,D2,D3,D4};
     byte colPins[COLS] = {D5,D6,D7};
@@ -24,42 +24,30 @@ private:
     Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 };
 
-
-
 //Make a door
-Door newDoor;
+Door door;
 //Set proper pins the proper way properly
-int Button = D0, speakerPin = A4, ButtonLast= LOW;
+int Button = D0, speakerPin = A4;
 
 
 
-void setup(){
+void setup() {
     Serial.begin(9600);
     pinMode(Button, INPUT_PULLDOWN);
+    Particle.subscribe("doorBellRing", doorBell, "1c002a000347363333343435");
+    Particle.subscribe("doorTMmotionDetected", motionDetected, "1c002a000347363333343435");
 }
   
   
   
-void loop(){
-    newDoor.getPress();
+void loop() {
+    door.getPress();
     getButton();
 }
 
 // - - - - START CLASS FUNCTION - - - -
-void Door::checkCode() {
-    if (correctCode) {
-        // add instructions to do something if secret code entered correctly
-		Serial.println("Correct code entered");
-		Particle.publish("Door(tm)code","CORRECT");
-		correctCode=false;
-    } else {
-        Serial.println("NOPE FRIENDO");
-        Particle.publish("Door(tm)code","INCORRECT");
-    }
-}
 
 void Door::getPress() {
-    static int correctCount = 0;
     char key = keypad.getKey();
     if (key) {
         Serial.println(key);
@@ -68,30 +56,68 @@ void Door::getPress() {
         // if key matches next key in secret code, add one to correct count
         if (!correctCode) {
            if (key == secretCode[correctCount]) {
+            //key is correct
                 correctCount++; 
            } else {
+            //Key is incorrect
                 correctCode=false;
-                // else wrong key was entered (reset correct count)
                 correctCount = 0; 
-            }   
-       } else {
-            correctCode=false;
+            }  
+       }    //Else keycode is too long, make it false. 
+       else {
+            correctCode=false;  correctCount=0;
         }
     }
     if (correctCount == codeLength) {
-        correctCode = true;
-        correctCount = 0;
+        correctCode = true; correctCount = 0;
     }
 }
+
+
+void Door::checkCode() {
+    if (correctCode) {
+        //Keycode is correct, unlock door
+        tone(speakerPin, 4000, 100);
+        delay(75);
+        tone(speakerPin, 5000, 150);
+		Serial.println("Correct code entered");
+		//Publish both a private and public event for the occasion
+		Particle.publish("Door(tm)code","CORRECT", PUBLIC);
+		Particle.publish("CodeEntered", "CORRECT");
+		correctCode=false;
+    } else {
+        //Code is wrong.
+        correctCount=0;
+        tone(speakerPin, 1250, 250);
+        Serial.println("NOPE FRIENDO");
+        //Publish both a private and public event for the occasion
+        Particle.publish("Door(tm)code","INCORRECT", PUBLIC);
+        Particle.publish("CodeEntered", "INCORRECT");
+    }
+}
+
 // - - - - END CLASS FUNCTIONS - - - -
 
 
 void getButton() {
+    static int ButtonLast;
     int ButtonNow = digitalRead(Button);
     if(ButtonNow == HIGH && ButtonLast == LOW) {;
-        newDoor.checkCode();
+        door.checkCode();
         ButtonLast = HIGH;
     } else if (ButtonNow == LOW) {
         ButtonLast = LOW;
     }
+}
+
+
+void motionDetected(const char *event, const char *data) {
+ static unsigned long long Time = millis();
+ //static unsigned long long 
+ Particle.publish("MotionDetection","DETECTED MOTION");
+ 
+}
+
+void doorBell(const char *event, const char *data) {
+    tone(speakerPin,4200,420);
 }
